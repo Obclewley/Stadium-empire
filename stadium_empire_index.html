@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#16213a" />
+  <title>Stadium Empire</title>
+  <style>
+    :root {
+      --panel: rgba(15, 23, 42, .92);
+      --panel2: rgba(30, 41, 59, .94);
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --accent: #fbbf24;
+      --good: #22c55e;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0f172a;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      user-select: none;
+      touch-action: none;
+    }
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      cursor: grab;
+      touch-action: none;
+    }
+    canvas.dragging { cursor: grabbing; }
+
+    .topbar {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 16px;
+      border: 1px solid rgba(255,255,255,.11);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: 0 12px 35px rgba(0,0,0,.32);
+      backdrop-filter: blur(12px);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .money { color: #fde68a; font-size: 21px; }
+    .stat { color: var(--muted); font-size: 14px; }
+    .stat strong { color: white; }
+
+    .title-card {
+      position: fixed;
+      top: max(14px, env(safe-area-inset-top));
+      left: 14px;
+      z-index: 5;
+      background: linear-gradient(145deg, rgba(23,37,84,.95), rgba(15,23,42,.95));
+      border: 1px solid rgba(255,255,255,.11);
+      border-radius: 18px;
+      padding: 13px 16px;
+      box-shadow: 0 12px 35px rgba(0,0,0,.3);
+    }
+    .title-card h1 {
+      margin: 0;
+      font-size: 19px;
+      letter-spacing: .2px;
+    }
+    .title-card div {
+      color: #93c5fd;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .controls {
+      position: fixed;
+      right: 14px;
+      top: max(14px, env(safe-area-inset-top));
+      z-index: 5;
+      display: flex;
+      gap: 8px;
+    }
+    .small-btn {
+      border: 1px solid rgba(255,255,255,.14);
+      background: var(--panel);
+      color: white;
+      border-radius: 12px;
+      width: 42px;
+      height: 42px;
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    }
+    .small-btn:active { transform: scale(.96); }
+
+    .upgrade-panel {
+      position: fixed;
+      z-index: 5;
+      left: 50%;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: repeat(3, minmax(180px, 230px));
+      gap: 10px;
+      width: min(760px, calc(100vw - 24px));
+    }
+    .upgrade {
+      border: 1px solid rgba(255,255,255,.12);
+      background: var(--panel2);
+      color: white;
+      border-radius: 17px;
+      padding: 12px;
+      text-align: left;
+      box-shadow: 0 12px 30px rgba(0,0,0,.3);
+      cursor: pointer;
+      transition: transform .14s ease, border-color .14s ease, filter .14s ease;
+      backdrop-filter: blur(10px);
+    }
+    .upgrade:hover {
+      transform: translateY(-2px);
+      border-color: rgba(251,191,36,.6);
+      filter: brightness(1.05);
+    }
+    .upgrade:active { transform: translateY(0) scale(.98); }
+    .upgrade.disabled { opacity: .55; }
+    .upgrade .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .upgrade .name { font-weight: 800; font-size: 15px; }
+    .upgrade .level {
+      font-size: 11px;
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: rgba(59,130,246,.2);
+      color: #bfdbfe;
+    }
+    .upgrade .desc {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      min-height: 30px;
+    }
+    .upgrade .price {
+      margin-top: 8px;
+      color: #fde68a;
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 10;
+      left: 50%;
+      top: 100px;
+      transform: translate(-50%, -10px);
+      background: rgba(15,23,42,.96);
+      color: white;
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 12px;
+      padding: 10px 15px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease, transform .2s ease;
+      box-shadow: 0 12px 32px rgba(0,0,0,.32);
+      font-weight: 700;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .hint {
+      position: fixed;
+      z-index: 4;
+      right: 14px;
+      bottom: 132px;
+      max-width: 250px;
+      padding: 10px 12px;
+      border-radius: 13px;
+      color: #dbeafe;
+      background: rgba(30,41,59,.8);
+      border: 1px solid rgba(255,255,255,.09);
+      font-size: 12px;
+      line-height: 1.4;
+      backdrop-filter: blur(8px);
+    }
+
+    @media (max-width: 760px) {
+      .title-card { display: none; }
+      .topbar {
+        left: 10px;
+        right: 10px;
+        transform: none;
+        justify-content: space-between;
+        gap: 7px;
+        padding: 9px 11px;
+      }
+      .money { font-size: 17px; }
+      .stat { font-size: 11px; }
+      .controls {
+        top: 66px;
+        right: 10px;
+      }
+      .upgrade-panel {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        width: calc(100vw - 12px);
+        bottom: max(6px, env(safe-area-inset-bottom));
+      }
+      .upgrade {
+        padding: 9px 8px;
+        border-radius: 13px;
+      }
+      .upgrade .name { font-size: 12px; }
+      .upgrade .level { font-size: 9px; padding: 3px 5px; }
+      .upgrade .desc { display: none; }
+      .upgrade .price { font-size: 11px; margin-top: 6px; }
+      .hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div class="title-card">
+    <h1>Stadium Empire</h1>
+    <div>Byg dit eget sportsområde</div>
+  </div>
+
+  <div class="topbar">
+    <div class="money" id="money">0 kr.</div>
+    <div class="stat">Besøgende: <strong id="visitors">0</strong></div>
+    <div class="stat">Indtjening: <strong id="income">0 kr./min.</strong></div>
+  </div>
+
+  <div class="controls">
+    <button class="small-btn" id="zoomIn" aria-label="Zoom ind">+</button>
+    <button class="small-btn" id="zoomOut" aria-label="Zoom ud">−</button>
+    <button class="small-btn" id="centerCam" aria-label="Centrer kamera">⌂</button>
+  </div>
+
+  <div class="hint">
+    Træk på banen for at bevæge kameraet. Brug musehjul eller knapperne til at zoome. På mobil kan du bruge én finger til at flytte og to fingre til at zoome.
+  </div>
+
+  <div class="upgrade-panel">
+    <button class="upgrade" id="upgradeStadium">
+      <div class="row"><span class="name">🏟️ Stadion</span><span class="level" id="stadiumLevel">Level 1</span></div>
+      <div class="desc" id="stadiumDesc"></div>
+      <div class="price" id="stadiumPrice"></div>
+    </button>
+    <button class="upgrade" id="upgradeFood">
+      <div class="row"><span class="name">🌭 Madbod</span><span class="level" id="foodLevel">Level 1</span></div>
+      <div class="desc" id="foodDesc"></div>
+      <div class="price" id="foodPrice"></div>
+    </button>
+    <button class="upgrade" id="upgradeParking">
+      <div class="row"><span class="name">🅿️ Parkering</span><span class="level" id="parkingLevel">Level 1</span></div>
+      <div class="desc" id="parkingDesc"></div>
+      <div class="price" id="parkingPrice"></div>
+    </button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+
+  const ui = {
+    money: document.getElementById("money"),
+    visitors: document.getElementById("visitors"),
+    income: document.getElementById("income"),
+    stadiumLevel: document.getElementById("stadiumLevel"),
+    stadiumDesc: document.getElementById("stadiumDesc"),
+    stadiumPrice: document.getElementById("stadiumPrice"),
+    foodLevel: document.getElementById("foodLevel"),
+    foodDesc: document.getElementById("foodDesc"),
+    foodPrice: document.getElementById("foodPrice"),
+    parkingLevel: document.getElementById("parkingLevel"),
+    parkingDesc: document.getElementById("parkingDesc"),
+    parkingPrice: document.getElementById("parkingPrice"),
+    upgradeStadium: document.getElementById("upgradeStadium"),
+    upgradeFood: document.getElementById("upgradeFood"),
+    upgradeParking: document.getElementById("upgradeParking"),
+    toast: document.getElementById("toast"),
+  };
+
+  const formatter = new Intl.NumberFormat("da-DK", {
+    maximumFractionDigits: 0
+  });
+
+  const world = { width: 1500, height: 1000 };
+  const camera = { x: 750, y: 480, zoom: 0.82, minZoom: 0.45, maxZoom: 1.65 };
+
+  const saved = JSON.parse(localStorage.getItem("stadiumEmpireSave") || "null");
+  const state = saved || {
+    money: 950,
+    totalVisitors: 0,
+    stadiumLevel: 1,
+    foodLevel: 1,
+    parkingLevel: 1
+  };
+
+  let visitors = [];
+  let particles = [];
+  let lastTime = performance.now();
+  let spawnTimer = 0;
+  let incomeRecent = [];
+  let toastTimer = null;
+
+  const layout = {
+    entrance: { x: 710, y: 860 },
+    stadium: { x: 750, y: 405 },
+    food: { x: 1120, y: 610 },
+    parking: { x: 260, y: 630 },
+    roadY: 890
+  };
+
+  function stadiumCapacity() { return 30 + (state.stadiumLevel - 1) * 22; }
+  function foodCapacity() { return 3 + state.foodLevel * 2; }
+  function parkingCapacity() { return 8 + state.parkingLevel * 7; }
+  function stadiumPrice() { return Math.round(650 * Math.pow(1.82, state.stadiumLevel - 1)); }
+  function foodPrice() { return Math.round(420 * Math.pow(1.75, state.foodLevel - 1)); }
+  function parkingPrice() { return Math.round(360 * Math.pow(1.7, state.parkingLevel - 1)); }
+  function ticketValue() { return 18 + state.stadiumLevel * 7; }
+  function foodValue() { return 5 + state.foodLevel * 4; }
+  function parkingValue() { return 3 + state.parkingLevel * 3; }
+
+  function save() {
+    localStorage.setItem("stadiumEmpireSave", JSON.stringify(state));
+  }
+
+  function showToast(text) {
+    ui.toast.textContent = text;
+    ui.toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => ui.toast.classList.remove("show"), 1500);
+  }
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width = innerWidth + "px";
+    canvas.style.height = innerHeight + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  function worldToScreen(x, y) {
+    return {
+      x: (x - camera.x) * camera.zoom + innerWidth / 2,
+      y: (y - camera.y) * camera.zoom + innerHeight / 2
+    };
+  }
+
+  function screenToWorld(x, y) {
+    return {
+      x: (x - innerWidth / 2) / camera.zoom + camera.x,
+      y: (y - innerHeight / 2) / camera.zoom + camera.y
+    };
+  }
+
+  function drawRoundedRect(x, y, w, h, r, fill, stroke) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.stroke(); }
+  }
+
+  function drawWorld() {
+    ctx.save();
+    ctx.translate(innerWidth / 2, innerHeight / 2);
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-camera.x, -camera.y);
+
+    // Ground
+    ctx.fillStyle = "#6fcf71";
+    ctx.fillRect(0, 0, world.width, world.height);
+
+    // Grass pattern
+    ctx.globalAlpha = .10;
+    ctx.fillStyle = "#14532d";
+    for (let y = 0; y < world.height; y += 80) {
+      for (let x = (y / 80) % 2 ? 40 : 0; x < world.width; x += 80) {
+        ctx.fillRect(x, y, 40, 40);
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // Roads
+    ctx.fillStyle = "#404b5a";
+    ctx.fillRect(0, layout.roadY, world.width, 110);
+    ctx.fillStyle = "#f8fafc";
+    for (let x = 20; x < world.width; x += 100) ctx.fillRect(x, layout.roadY + 53, 55, 5);
+
+    // Paths
+    drawPath(layout.entrance.x, layout.entrance.y, layout.stadium.x, 570, 42);
+    drawPath(layout.parking.x + 160, layout.parking.y + 70, layout.entrance.x - 70, layout.entrance.y - 15, 30);
+    drawPath(layout.food.x - 100, layout.food.y + 35, layout.entrance.x + 90, layout.entrance.y - 25, 30);
+
+    drawTrees();
+    drawParking();
+    drawFoodStand();
+    drawStadium();
+    drawVisitors();
+    drawParticles();
+
+    ctx.restore();
+  }
+
+  function drawPath(x1, y1, x2, y2, width) {
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(148,163,184,.35)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  function drawTrees() {
+    const trees = [
+      [90,130],[180,210],[310,125],[470,170],[1250,130],[1370,230],
+      [130,780],[1370,760],[1240,850],[520,760],[930,770],[1020,180],[600,110]
+    ];
+    trees.forEach(([x,y], i) => {
+      ctx.fillStyle = "#795548";
+      ctx.fillRect(x-5, y, 10, 30);
+      ctx.fillStyle = i % 2 ? "#166534" : "#15803d";
+      ctx.beginPath(); ctx.arc(x, y-5, 27, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.14)";
+      ctx.beginPath(); ctx.arc(x-8, y-13, 9, 0, Math.PI*2); ctx.fill();
+    });
+  }
+
+  function drawStadium() {
+    const lvl = state.stadiumLevel;
+    const scale = 1 + Math.min(lvl - 1, 8) * .055;
+    const x = layout.stadium.x, y = layout.stadium.y;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    // shadow
+    ctx.fillStyle = "rgba(15,23,42,.25)";
+    ctx.beginPath(); ctx.ellipse(15, 28, 235, 145, 0, 0, Math.PI*2); ctx.fill();
+
+    // outer bowl
+    ctx.fillStyle = lvl >= 5 ? "#1d4ed8" : "#2563eb";
+    ctx.beginPath(); ctx.ellipse(0, 0, 225, 135, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#dbeafe";
+    ctx.beginPath(); ctx.ellipse(0, -4, 185, 102, 0, 0, Math.PI*2); ctx.fill();
+
+    // stands
+    ctx.strokeStyle = lvl >= 4 ? "#fbbf24" : "#60a5fa";
+    ctx.lineWidth = 25;
+    ctx.beginPath(); ctx.ellipse(0, -4, 163, 83, 0, 0, Math.PI*2); ctx.stroke();
+
+    // field
+    ctx.fillStyle = "#16a34a";
+    ctx.beginPath(); ctx.ellipse(0, -4, 120, 57, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(0, -4, 103, 45, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,-49); ctx.lineTo(0,41); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0,-4,14,0,Math.PI*2); ctx.stroke();
+
+    // entrance
+    drawRoundedRect(-45, 105, 90, 55, 10, "#0f172a");
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 19px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("STADIUM", 0, 140);
+
+    if (lvl >= 3) {
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(-25,-180,50,55);
+      ctx.fillStyle = "#fde047";
+      ctx.fillRect(-19,-173,38,29);
+    }
+    if (lvl >= 6) {
+      ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 7;
+      [-175,175].forEach(px => {
+        ctx.beginPath(); ctx.moveTo(px,-75); ctx.lineTo(px,-190); ctx.stroke();
+        ctx.fillStyle="#f8fafc"; ctx.fillRect(px-23,-198,46,20);
+      });
+    }
+    ctx.restore();
+
+    drawLabel(x, y - 210, "Stadion • " + stadiumCapacity() + " pladser");
+  }
+
+  function drawFoodStand() {
+    const lvl = state.foodLevel;
+    const x = layout.food.x, y = layout.food.y;
+    const w = 115 + lvl * 8;
+    const h = 78 + lvl * 4;
+
+    ctx.fillStyle = "rgba(15,23,42,.24)";
+    ctx.fillRect(x-w/2+12,y-h/2+16,w,h);
+    drawRoundedRect(x-w/2,y-h/2,w,h,12,lvl >= 5 ? "#f97316" : "#ef4444");
+
+    // awning
+    const stripeW = w / 6;
+    for (let i=0;i<6;i++) {
+      ctx.fillStyle = i%2 ? "#fff7ed" : "#fbbf24";
+      ctx.fillRect(x-w/2+i*stripeW,y-h/2-14,stripeW,24);
+    }
+    ctx.fillStyle = "#7c2d12";
+    ctx.fillRect(x-w/2+16,y-4,w-32,34);
+    ctx.fillStyle = "white";
+    ctx.font = "bold 17px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(lvl >= 6 ? "FOOD COURT" : "MAD & DRIKKE", x, y+18);
+
+    if (lvl >= 3) {
+      ctx.fillStyle = "#fb923c";
+      ctx.beginPath(); ctx.arc(x+w/2-20,y-h/2-32,22,0,Math.PI*2); ctx.fill();
+      ctx.font = "22px sans-serif"; ctx.fillText("🌭",x+w/2-20,y-h/2-24);
+    }
+    drawLabel(x, y - h/2 - 60, "Madbod • " + foodCapacity() + " kunder");
+  }
+
+  function drawParking() {
+    const lvl = state.parkingLevel;
+    const x = layout.parking.x, y = layout.parking.y;
+    const cols = Math.min(3 + Math.floor(lvl/2), 7);
+    const rows = Math.min(2 + Math.floor(lvl/3), 5);
+    const w = 280 + lvl * 12;
+    const h = 180 + lvl * 8;
+
+    drawRoundedRect(x-w/2,y-h/2,w,h,14,lvl >= 5 ? "#64748b" : "#94a3b8");
+    ctx.strokeStyle = "#f8fafc";
+    ctx.lineWidth = 3;
+
+    const cellW = (w-35)/cols;
+    const cellH = (h-30)/rows;
+    let drawn = 0;
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        const px=x-w/2+18+c*cellW;
+        const py=y-h/2+15+r*cellH;
+        ctx.strokeRect(px,py,cellW-8,cellH-8);
+        if(drawn < Math.min(parkingCapacity(), visitors.filter(v=>v.hasCar && v.stage>0).length+3)){
+          drawCar(px+(cellW-8)/2,py+(cellH-8)/2, c%3);
+        }
+        drawn++;
+      }
+    }
+    ctx.fillStyle="#2563eb";
+    ctx.fillRect(x-w/2-32,y-h/2+20,44,60);
+    ctx.fillStyle="white";
+    ctx.font="bold 32px sans-serif";
+    ctx.textAlign="center";
+    ctx.fillText("P",x-w/2-10,y-h/2+62);
+
+    drawLabel(x, y - h/2 - 35, "Parkering • " + parkingCapacity() + " biler");
+  }
+
+  function drawCar(x,y,type=0){
+    const colors=["#3b82f6","#facc15","#f43f5e","#14b8a6"];
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.fillStyle=colors[type%colors.length];
+    drawRoundedRect(-17,-9,34,18,6,colors[type%colors.length]);
+    ctx.fillStyle="#dbeafe";
+    ctx.fillRect(-9,-7,18,6);
+    ctx.fillStyle="#111827";
+    ctx.beginPath();ctx.arc(-11,10,4,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(11,10,4,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+
+  function drawLabel(x,y,text){
+    ctx.font="bold 15px sans-serif";
+    const width=ctx.measureText(text).width+24;
+    drawRoundedRect(x-width/2,y-20,width,32,12,"rgba(15,23,42,.84)");
+    ctx.fillStyle="white";
+    ctx.textAlign="center";
+    ctx.fillText(text,x,y+2);
+  }
+
+  function createVisitor() {
+    const parkingUsed = visitors.filter(v => v.hasCar && v.stage < 5).length;
+    const hasCar = Math.random() < .62 && parkingUsed < parkingCapacity();
+    const start = hasCar ? {x: 40, y: layout.roadY + 30} : {x: world.width - 30, y: layout.roadY + 75};
+
+    const path = [];
+    if (hasCar) {
+      path.push({x: layout.parking.x, y: layout.parking.y+80});
+      path.push({x: layout.parking.x+130, y: layout.parking.y+80});
+    }
+    path.push({x: layout.entrance.x, y: layout.entrance.y});
+    if (Math.random() < Math.min(.42 + state.foodLevel*.04, .82)) {
+      path.push({x: layout.food.x-55, y: layout.food.y+70, food:true});
+    }
+    path.push({x: layout.stadium.x, y: layout.stadium.y+135, stadium:true});
+    path.push({x: layout.entrance.x, y: layout.entrance.y});
+    path.push({x: hasCar ? 30 : world.width-30, y: layout.roadY+65, exit:true});
+
+    visitors.push({
+      x:start.x,y:start.y,
+      path, targetIndex:0,
+      speed: 42 + Math.random()*18,
+      color: ["#fde047","#38bdf8","#fb7185","#a78bfa","#f8fafc","#34d399"][Math.floor(Math.random()*6)],
+      stage:0, hasCar,
+      wait:0,
+      paidTicket:false,
+      paidFood:false,
+      radius:5+Math.random()*2
+    });
+  }
+
+  function updateVisitors(dt) {
+    const currentInside = visitors.filter(v => v.paidTicket && v.stage < v.path.length-2).length;
+
+    for (let i=visitors.length-1;i>=0;i--) {
+      const v=visitors[i];
+      if(v.wait>0){v.wait-=dt; continue;}
+      const target=v.path[v.targetIndex];
+      if(!target){ visitors.splice(i,1); continue; }
+      const dx=target.x-v.x, dy=target.y-v.y;
+      const dist=Math.hypot(dx,dy);
+
+      if(dist<8){
+        if(target.food && !v.paidFood){
+          const foodQueue=visitors.filter(o=>o.wait>0 && o.path[o.targetIndex]?.food).length;
+          if(foodQueue < foodCapacity()){
+            const value=foodValue();
+            state.money+=value;
+            incomeRecent.push({time:performance.now(),amount:value});
+            v.paidFood=true;
+            v.wait=.5+Math.random()*.8;
+            moneyParticle(v.x,v.y,"+"+value+" kr.");
+          }
+        }
+        if(target.stadium && !v.paidTicket){
+          if(currentInside < stadiumCapacity()){
+            const value=ticketValue() + (v.hasCar ? parkingValue() : 0);
+            state.money+=value;
+            state.totalVisitors++;
+            incomeRecent.push({time:performance.now(),amount:value});
+            v.paidTicket=true;
+            v.wait=1.2+Math.random()*1.6;
+            moneyParticle(v.x,v.y,"+"+value+" kr.");
+          } else {
+            v.targetIndex = Math.max(v.path.length-2, v.targetIndex+1);
+            continue;
+          }
+        }
+        v.targetIndex++;
+        v.stage=v.targetIndex;
+      }else{
+        v.x += dx/dist*v.speed*dt;
+        v.y += dy/dist*v.speed*dt;
+      }
+    }
+  }
+
+  function moneyParticle(x,y,text){
+    particles.push({x,y,text,life:1.2,maxLife:1.2});
+  }
+
+  function updateParticles(dt){
+    particles.forEach(p=>{p.life-=dt;p.y-=18*dt;});
+    particles=particles.filter(p=>p.life>0);
+  }
+
+  function drawVisitors(){
+    visitors.forEach(v=>{
+      ctx.fillStyle="rgba(0,0,0,.18)";
+      ctx.beginPath();ctx.ellipse(v.x+2,v.y+7,v.radius+2,3,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=v.color;
+      ctx.beginPath();ctx.arc(v.x,v.y,v.radius,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="#1e293b";
+      ctx.fillRect(v.x-2,v.y+v.radius-1,4,7);
+    });
+  }
+
+  function drawParticles(){
+    particles.forEach(p=>{
+      ctx.globalAlpha=Math.max(0,p.life/p.maxLife);
+      ctx.fillStyle="#14532d";
+      ctx.font="bold 15px sans-serif";
+      ctx.textAlign="center";
+      ctx.fillText(p.text,p.x,p.y);
+      ctx.globalAlpha=1;
+    });
+  }
+
+  function update(dt) {
+    spawnTimer -= dt;
+    const spawnRate = Math.max(.45, 2.25 - state.stadiumLevel*.11 - state.parkingLevel*.05);
+    if(spawnTimer <= 0 && visitors.length < 100){
+      createVisitor();
+      spawnTimer=spawnRate*(.65+Math.random()*.7);
+    }
+    updateVisitors(dt);
+    updateParticles(dt);
+    incomeRecent = incomeRecent.filter(i => performance.now()-i.time < 60000);
+    updateUI();
+  }
+
+  function updateUI(){
+    ui.money.textContent=formatter.format(Math.floor(state.money))+" kr.";
+    ui.visitors.textContent=formatter.format(state.totalVisitors);
+    const income=incomeRecent.reduce((s,i)=>s+i.amount,0);
+    ui.income.textContent=formatter.format(income)+" kr./min.";
+
+    const data=[
+      ["stadium",state.stadiumLevel,stadiumPrice(),stadiumCapacity()+" pladser • "+ticketValue()+" kr. pr. billet"],
+      ["food",state.foodLevel,foodPrice(),foodCapacity()+" kunder • "+foodValue()+" kr. pr. salg"],
+      ["parking",state.parkingLevel,parkingPrice(),parkingCapacity()+" biler • "+parkingValue()+" kr. pr. bil"]
+    ];
+    data.forEach(([type,lvl,price,desc])=>{
+      ui[type+"Level"].textContent="Level "+lvl;
+      ui[type+"Desc"].textContent=desc;
+      ui[type+"Price"].textContent="Opgradér: "+formatter.format(price)+" kr.";
+      ui["upgrade"+type[0].toUpperCase()+type.slice(1)].classList.toggle("disabled",state.money<price);
+    });
+  }
+
+  function upgrade(type){
+    let price, key;
+    if(type==="stadium"){price=stadiumPrice();key="stadiumLevel";}
+    if(type==="food"){price=foodPrice();key="foodLevel";}
+    if(type==="parking"){price=parkingPrice();key="parkingLevel";}
+    if(state.money<price){showToast("Du mangler "+formatter.format(price-state.money)+" kr.");return;}
+    state.money-=price;
+    state[key]++;
+    save();
+    showToast("Opgraderet til level "+state[key]);
+    for(let i=0;i<12;i++){
+      particles.push({
+        x:layout[type].x+(Math.random()-.5)*120,
+        y:layout[type].y+(Math.random()-.5)*80,
+        text:"✨",life:.8+Math.random()*.5,maxLife:1.3
+      });
+    }
+  }
+
+  ui.upgradeStadium.addEventListener("click",()=>upgrade("stadium"));
+  ui.upgradeFood.addEventListener("click",()=>upgrade("food"));
+  ui.upgradeParking.addEventListener("click",()=>upgrade("parking"));
+
+  document.getElementById("zoomIn").onclick=()=>camera.zoom=Math.min(camera.maxZoom,camera.zoom*1.18);
+  document.getElementById("zoomOut").onclick=()=>camera.zoom=Math.max(camera.minZoom,camera.zoom/1.18);
+  document.getElementById("centerCam").onclick=()=>{
+    camera.x=750;camera.y=480;camera.zoom=innerWidth<760?.62:.82;
+  };
+
+  // Mouse drag + zoom
+  let dragging=false,lastPointer={x:0,y:0};
+  canvas.addEventListener("pointerdown",e=>{
+    dragging=true;lastPointer={x:e.clientX,y:e.clientY};
+    canvas.classList.add("dragging");
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove",e=>{
+    if(!dragging || activeTouches.size>1)return;
+    const dx=e.clientX-lastPointer.x,dy=e.clientY-lastPointer.y;
+    camera.x-=dx/camera.zoom;camera.y-=dy/camera.zoom;
+    clampCamera();
+    lastPointer={x:e.clientX,y:e.clientY};
+  });
+  canvas.addEventListener("pointerup",e=>{
+    dragging=false;canvas.classList.remove("dragging");
+    try{canvas.releasePointerCapture(e.pointerId);}catch{}
+  });
+  canvas.addEventListener("wheel",e=>{
+    e.preventDefault();
+    const before=screenToWorld(e.clientX,e.clientY);
+    const factor=e.deltaY<0?1.1:.9;
+    camera.zoom=Math.min(camera.maxZoom,Math.max(camera.minZoom,camera.zoom*factor));
+    const after=screenToWorld(e.clientX,e.clientY);
+    camera.x+=before.x-after.x;
+    camera.y+=before.y-after.y;
+    clampCamera();
+  },{passive:false});
+
+  // Pinch zoom
+  const activeTouches=new Map();
+  let pinchDistance=0;
+  canvas.addEventListener("pointerdown",e=>{
+    activeTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(activeTouches.size===2){
+      const pts=[...activeTouches.values()];
+      pinchDistance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);
+    }
+  });
+  canvas.addEventListener("pointermove",e=>{
+    if(!activeTouches.has(e.pointerId))return;
+    activeTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(activeTouches.size===2){
+      const pts=[...activeTouches.values()];
+      const d=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);
+      if(pinchDistance){
+        camera.zoom=Math.min(camera.maxZoom,Math.max(camera.minZoom,camera.zoom*(d/pinchDistance)));
+      }
+      pinchDistance=d;
+    }
+  });
+  ["pointerup","pointercancel"].forEach(type=>canvas.addEventListener(type,e=>{
+    activeTouches.delete(e.pointerId);
+    if(activeTouches.size<2)pinchDistance=0;
+  }));
+
+  function clampCamera(){
+    camera.x=Math.max(0,Math.min(world.width,camera.x));
+    camera.y=Math.max(0,Math.min(world.height,camera.y));
+  }
+
+  function loop(now){
+    const dt=Math.min((now-lastTime)/1000,.033);
+    lastTime=now;
+    update(dt);
+    ctx.clearRect(0,0,innerWidth,innerHeight);
+    drawWorld();
+    requestAnimationFrame(loop);
+  }
+
+  setInterval(save,4000);
+  updateUI();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
